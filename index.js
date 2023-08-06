@@ -3,14 +3,26 @@ const express = require("express");
 const cors = require("cors");
 const app = express();
 const dns = require("node:dns");
-const { MongoClient } = require("mongodb");
+const mongoose = require("mongoose");
 const dotenv = require("dotenv");
+const { randomUUID } = require("crypto");
+
+const urlSchema = new mongoose.Schema({
+  _id: {
+    type: "UUID",
+    default: () => randomUUID(),
+  },
+  original_url: {
+    type: String,
+    required: true,
+  },
+});
+const Url = mongoose.model("url", urlSchema);
 
 // Basic Configuration
 dotenv.config();
 const port = process.env.PORT || 3000;
-const uri = process.env.MONGO_URI;
-const client = new MongoClient(uri);
+const mongoUri = process.env.MONGO_URI;
 
 const invalid = { error: "Invalid URL" };
 
@@ -71,21 +83,20 @@ async function dnsLookup(req, res, next) {
 
 async function addToDatabase(req, res) {
   try {
-    const database = client.db("urlsDB");
-    const urls = database.collection("urls");
-
-    const query = { url: req.body.url };
-    const urlEntry = await urls.insertOne(query);
-    if (urlEntry.acknowledged) {
-      res.json({ original_url: req.body.url });
-    } else {
-      res.status(500).send("Can't connect to the database");
-    }
+    const monconnect = await mongoose.connect(mongoUri);
   } catch (err) {
-    console.err(err);
+    console.error(err);
     res.status(500).send("Can't connect to the database");
-  } finally {
-    await client.close();
+  }
+  const userUrl = new Url({ original_url: req.body.url });
+  console.log(userUrl);
+  try {
+    const writeResult = await userUrl.save();
+    console.log(`Result: ${writeResult}`);
+    res.json({ original_url: req.body.url });
+  } catch (error) {
+    console.error(error);
+    res.status(500).send("Can't connect to the database");
   }
 }
 
