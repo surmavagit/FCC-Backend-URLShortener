@@ -3,9 +3,14 @@ const express = require("express");
 const cors = require("cors");
 const app = express();
 const dns = require("node:dns");
+const { MongoClient } = require("mongodb");
+const dotenv = require("dotenv");
 
 // Basic Configuration
+dotenv.config();
 const port = process.env.PORT || 3000;
+const uri = process.env.MONGO_URI;
+const client = new MongoClient(uri);
 
 const invalid = { error: "Invalid URL" };
 
@@ -54,18 +59,38 @@ async function parseUrl(req, res, next) {
   }
 }
 
-async function dnsLookup(req, res) {
+async function dnsLookup(req, res, next) {
   dns.lookup(req.data, function (err, address, family) {
     if (err) {
       res.json(invalid);
     } else {
-      res.json({original_url: req.body.url});
+      next();
     }
   });
 }
 
-app.use(express.urlencoded())
-app.post("/api/shorturl", parseUrl, dnsLookup);
+async function addToDatabase(req, res) {
+  try {
+    const database = client.db("urlsDB");
+    const urls = database.collection("urls");
+
+    const query = { url: req.body.url };
+    const urlEntry = await urls.insertOne(query);
+    if (urlEntry.acknowledged) {
+      res.json({ original_url: req.body.url });
+    } else {
+      res.status(500).send("Can't connect to the database");
+    }
+  } catch (err) {
+    console.err(err);
+    res.status(500).send("Can't connect to the database");
+  } finally {
+    await client.close();
+  }
+}
+
+app.use(express.urlencoded());
+app.post("/api/shorturl", parseUrl, dnsLookup, addToDatabase);
 app.listen(port, function () {
   console.log(`Listening on port ${port}`);
 });
