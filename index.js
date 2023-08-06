@@ -23,10 +23,12 @@ app.post('/api/shorturl', express.urlencoded(), function(req, res) {
     const invalid = {error: 'Invalid URL'};
     const url = req.body.url;
     let prurl = '';
-    if (url.startsWith('https://')) {
-        prurl = url.slice('https://'.length);
-    } else if (url.startsWith('http://')) {
-        prurl = url.slice('http://'.length);
+    const http = 'http://';
+    const https = 'https://';
+    if (url.startsWith(https)) {
+        prurl = url.slice(https.length);
+    } else if (url.startsWith(http)) {
+        prurl = url.slice(http.length);
     }
 
     let host = '';
