@@ -7,6 +7,8 @@ const dns = require("node:dns");
 // Basic Configuration
 const port = process.env.PORT || 3000;
 
+const invalid = { error: "Invalid URL" };
+
 app.use(cors());
 
 app.use("/public", express.static(`${process.cwd()}/public`));
@@ -19,14 +21,7 @@ app.get("/api/hello", function (req, res) {
   res.json({ greeting: "hello API" });
 });
 
-app.post("/api/shorturl", express.urlencoded(), parseUrl, dnsLookup);
-
-app.listen(port, function () {
-  console.log(`Listening on port ${port}`);
-});
-
 async function parseUrl(req, res, next) {
-  const invalid = { error: "Invalid URL" };
   const url = req.body.url;
   const http = "http://";
   const https = "https://";
@@ -60,15 +55,17 @@ async function parseUrl(req, res, next) {
 }
 
 async function dnsLookup(req, res) {
-  if (host) {
-    dns.lookup(host, function (err, address, family) {
-      if (err) {
-        res.json(invalid);
-      } else {
-        res.json({ original_url: url });
-      }
-    });
-  } else {
-    res.json(invalid);
-  }
+  dns.lookup(req.data, function (err, address, family) {
+    if (err) {
+      res.json(invalid);
+    } else {
+      res.json({original_url: req.body.url});
+    }
+  });
 }
+
+app.use(express.urlencoded())
+app.post("/api/shorturl", parseUrl, dnsLookup);
+app.listen(port, function () {
+  console.log(`Listening on port ${port}`);
+});
