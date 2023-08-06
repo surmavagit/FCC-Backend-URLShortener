@@ -82,18 +82,12 @@ async function dnsLookup(req, res, next) {
 async function addToDatabase(req, res) {
   try {
     const monconnect = await mongoose.connect(mongoUri);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("Can't connect to the database");
-  }
-  const userUrl = new Url({ original_url: req.body.url });
-  console.log(userUrl);
-  try {
+    const userUrl = new Url({ original_url: req.body.url });
     const writeResult = await userUrl.save();
     console.log(`Result: ${writeResult}`);
     res.json({ original_url: req.body.url });
-  } catch (error) {
-    console.error(error);
+  } catch (err) {
+    console.error(err);
     res.status(500).send("Can't connect to the database");
   }
 }
