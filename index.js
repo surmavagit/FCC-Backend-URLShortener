@@ -4,7 +4,6 @@ const cors = require("cors");
 const app = express();
 const dns = require("node:dns");
 const mongoose = require("mongoose");
-const dotenv = require("dotenv");
 const { randomUUID } = require("crypto");
 
 const urlSchema = new mongoose.Schema({
@@ -20,7 +19,6 @@ const urlSchema = new mongoose.Schema({
 const Url = mongoose.model("url", urlSchema);
 
 // Basic Configuration
-dotenv.config();
 const port = process.env.PORT || 3000;
 const mongoUri = process.env.MONGO_URI;
 
