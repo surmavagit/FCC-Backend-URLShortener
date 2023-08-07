@@ -15,6 +15,10 @@ const urlSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  short_url: {
+    type: Number,
+    required: true,
+  }
 });
 const Url = mongoose.model("url", urlSchema);
 
@@ -79,13 +83,34 @@ async function dnsLookup(req, res, next) {
   });
 }
 
+async function findInDatabase(req, res, next) {
+  try {
+    await mongoose.connect(mongoUri);
+    const query = Url.where({ original_url: req.body.url });
+    const knownUrl = await query.findOne();
+    if (knownUrl === null) {
+      next();
+    } else {
+      res.json({
+        original_url: knownUrl.original_url,
+        short_url: knownUrl.short_url,
+      });
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Can't connect to the database");
+  }
+}
 async function addToDatabase(req, res) {
   try {
-    const monconnect = await mongoose.connect(mongoUri);
-    const userUrl = new Url({ original_url: req.body.url });
-    const writeResult = await userUrl.save();
-    console.log(`Result: ${writeResult}`);
-    res.json({ original_url: req.body.url });
+    await mongoose.connect(mongoUri);
+    const urlCount = await Url.estimatedDocumentCount();
+    const userUrl = {
+      original_url: req.body.url,
+      short_url: urlCount + 1,
+    }
+    const writeResult = await new Url(userUrl).save();
+    res.json(userUrl);
   } catch (err) {
     console.error(err);
     res.status(500).send("Can't connect to the database");
@@ -93,7 +118,7 @@ async function addToDatabase(req, res) {
 }
 
 app.use(express.urlencoded());
-app.post("/api/shorturl", parseUrl, dnsLookup, addToDatabase);
+app.post("/api/shorturl", parseUrl, dnsLookup, findInDatabase, addToDatabase);
 app.listen(port, function () {
   console.log(`Listening on port ${port}`);
 });
