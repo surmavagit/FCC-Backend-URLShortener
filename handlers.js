@@ -1,12 +1,7 @@
 const dns = require("node:dns");
 const mongoose = require("mongoose");
-const { randomUUID } = require("crypto");
 
 const urlSchema = new mongoose.Schema({
-  _id: {
-    type: "UUID",
-    default: () => randomUUID(),
-  },
   original_url: {
     type: String,
     required: true,
@@ -14,21 +9,24 @@ const urlSchema = new mongoose.Schema({
   short_url: {
     type: Number,
     required: true,
-  }
+  },
 });
 
 const Url = mongoose.model("url", urlSchema);
 
 const mongoUri = process.env.MONGO_URI;
 
-const invalid = { error: "Invalid URL" };
+const ErrorMessage = {
+  invalid: { error: "Invalid URL" },
+  connect: { error: "Can't connect to the database" },
+};
 
 async function parseUrl(req, res, next) {
-  const url = req.body.url;
+  const url = (req.userUrl = req.body.url);
   const http = "http://";
   const https = "https://";
   if (!url.startsWith(http) && !url.startsWith(https)) {
-    res.json(invalid);
+    res.json(ErrorMessage.invalid);
   } else {
     let prurl = "";
     if (url.startsWith(https)) {
@@ -37,7 +35,7 @@ async function parseUrl(req, res, next) {
       prurl = url.slice(http.length);
     }
     if (!prurl) {
-      res.json(invalid);
+      res.json(ErrorMessage.invalid);
     } else {
       let host = "";
       const pathStartsAt = prurl.indexOf("/");
@@ -47,9 +45,9 @@ async function parseUrl(req, res, next) {
         host = prurl;
       }
       if (!host) {
-        res.json(invalid);
+        res.json(ErrorMessage.invalid);
       } else {
-        req.data = host;
+        req.userHost = host;
         next();
       }
     }
@@ -57,9 +55,9 @@ async function parseUrl(req, res, next) {
 }
 
 async function dnsLookup(req, res, next) {
-  dns.lookup(req.data, function (err, address, family) {
+  dns.lookup(req.userHost, function (err, address, family) {
     if (err) {
-      res.json(invalid);
+      res.json(ErrorMessage.invalid);
     } else {
       next();
     }
@@ -69,35 +67,36 @@ async function dnsLookup(req, res, next) {
 async function findInDatabase(req, res, next) {
   try {
     await mongoose.connect(mongoUri);
-    const query = Url.where({ original_url: req.body.url });
-    const knownUrl = await query.findOne();
-    if (knownUrl === null) {
-      next();
-    } else {
-      res.json({
-        original_url: knownUrl.original_url,
-        short_url: knownUrl.short_url,
-      });
-    }
+    const query = Url.where({ original_url: req.userUrl });
+    req.dbUrl = await query.findOne();
+    next();
   } catch (err) {
     console.error(err);
-    res.status(500).send("Can't connect to the database");
+    res.status(500).send(ErrorMessage.connect);
   }
 }
 
 async function addToDatabase(req, res) {
-  try {
-    await mongoose.connect(mongoUri);
-    const urlCount = await Url.estimatedDocumentCount();
-    const userUrl = {
-      original_url: req.body.url,
-      short_url: urlCount + 1,
+  const dbUrl = req.dbUrl;
+  if (dbUrl === null) {
+    try {
+      await mongoose.connect(mongoUri);
+      const urlCount = await Url.estimatedDocumentCount();
+      const userUrl = {
+        original_url: req.userUrl,
+        short_url: urlCount + 1,
+      };
+      const writeResult = await new Url(userUrl).save();
+      res.json(userUrl);
+    } catch (err) {
+      console.error(err);
+      res.status(500).send(ErrorMessage.connect);
     }
-    const writeResult = await new Url(userUrl).save();
-    res.json(userUrl);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("Can't connect to the database");
+  } else {
+    function filter({ original_url, short_url }) {
+      return { original_url, short_url };
+    }
+    res.json(filter(dbUrl));
   }
 }
 
